@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="tr" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="description" content="Tam teşekküllü hava durumu uygulaması - anlık hava, 7 günlük tahmin, saatlik tahmin">
+    <meta name="theme-color" content="#4A90D9">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="HavaDurumu">
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <title>HavaDurumu - Hava Durumu PWA</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="app">
+        <div id="weather-bg" class="weather-bg">
+            <div id="weather-animation" class="weather-animation"></div>
+        </div>
+
+        <header class="app-header">
+            <div class="header-left">
+                <button id="menu-btn" class="icon-btn" aria-label="Menu">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+                </button>
+                <h1 class="app-title">HavaDurumu</h1>
+            </div>
+            <div class="header-right">
+                <button id="unit-toggle" class="icon-btn unit-btn" aria-label="Birim Degistir">°C</button>
+                <button id="theme-toggle" class="icon-btn" aria-label="Tema Degistir">
+                    <svg id="theme-icon-light" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+                    <svg id="theme-icon-dark" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+                </button>
+                <button id="location-btn" class="icon-btn" aria-label="Konumumu Bul">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>
+                </button>
+            </div>
+        </header>
+
+        <div class="search-container">
+            <div class="search-box">
+                <svg class="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" id="search-input" placeholder="Sehir ara..." autocomplete="off">
+                <button id="search-clear" class="search-clear" style="display:none">&times;</button>
+            </div>
+            <div id="search-suggestions" class="search-suggestions"></div>
+        </div>
+
+        <div id="sidebar" class="sidebar">
+            <div class="sidebar-overlay" id="sidebar-overlay"></div>
+            <div class="sidebar-content">
+                <div class="sidebar-header">
+                    <h2>Menu</h2>
+                    <button id="sidebar-close" class="icon-btn">&times;</button>
+                </div>
+                <div class="sidebar-section">
+                    <h3>Favori Sehirler</h3>
+                    <ul id="favorites-list" class="city-list"></ul>
+                    <p id="no-favorites" class="empty-msg">Henuz favori sehir yok</p>
+                </div>
+                <div class="sidebar-section">
+                    <h3>Arama Gecmisi</h3>
+                    <ul id="history-list" class="city-list"></ul>
+                    <p id="no-history" class="empty-msg">Henuz arama gecmisi yok</p>
+                    <button id="clear-history" class="text-btn" style="display:none">Gecmisi Temizle</button>
+                </div>
+            </div>
+        </div>
+
+        <main class="main-content">
+            <div id="loading" class="loading">
+                <div class="spinner"></div>
+                <p>Hava durumu yukleniyor...</p>
+            </div>
+
+            <div id="error-container" class="error-container" style="display:none">
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                <p id="error-message">Bir hata olustu</p>
+                <button id="retry-btn" class="primary-btn">Tekrar Dene</button>
+            </div>
+
+            <div id="weather-content" style="display:none">
+                <nav class="tab-nav">
+                    <button class="tab-btn active" data-tab="today">Bugun</button>
+                    <button class="tab-btn" data-tab="forecast">7 Gun</button>
+                    <button class="tab-btn" data-tab="details">Detaylar</button>
+                </nav>
+
+                <div id="tab-today" class="tab-panel active">
+                    <div class="current-weather">
+                        <div class="location-info">
+                            <h2 id="city-name">--</h2>
+                            <p id="current-date">--</p>
+                            <button id="fav-btn" class="fav-btn" aria-label="Favorilere Ekle">
+                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                            </button>
+                        </div>
+                        <div class="temp-main">
+                            <div id="weather-icon-main" class="weather-icon-large"></div>
+                            <div class="temp-info">
+                                <span id="current-temp" class="current-temp">--</span>
+                                <span id="weather-desc" class="weather-desc">--</span>
+                            </div>
+                        </div>
+                        <div class="temp-range">
+                            <span id="temp-max"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg> --</span>
+                            <span id="temp-min"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg> --</span>
+                            <span id="feels-like">Hissedilen: --</span>
+                        </div>
+                    </div>
+
+                    <div class="quick-info">
+                        <div class="info-card">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v10l4.5 4.5"/><circle cx="12" cy="12" r="10"/></svg>
+                            <span class="info-label">Gundogumu</span>
+                            <span id="sunrise" class="info-value">--</span>
+                        </div>
+                        <div class="info-card">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2v10l4.5 4.5"/></svg>
+                            <span class="info-label">Gunbatimi</span>
+                            <span id="sunset" class="info-value">--</span>
+                        </div>
+                        <div class="info-card">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/></svg>
+                            <span class="info-label">Hissedilen</span>
+                            <span id="feels-like-card" class="info-value">--</span>
+                        </div>
+                        <div class="info-card">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2.5 2.5 0 1 1 19.5 12H2"/></svg>
+                            <span class="info-label">Ruzgar</span>
+                            <span id="wind-card" class="info-value">--</span>
+                        </div>
+                    </div>
+
+                    <div class="hourly-section">
+                        <h3>Saatlik Tahmin</h3>
+                        <div id="hourly-scroll" class="hourly-scroll"></div>
+                    </div>
+                </div>
+
+                <div id="tab-forecast" class="tab-panel">
+                    <h3 class="section-title">7 Gunluk Tahmin</h3>
+                    <div id="forecast-list" class="forecast-list"></div>
+                </div>
+
+                <div id="tab-details" class="tab-panel">
+                    <h3 class="section-title">Hava Detaylari</h3>
+                    <div class="details-grid">
+                        <div class="detail-card">
+                            <div class="detail-icon">
+                                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>
+                            </div>
+                            <span class="detail-label">Nem</span>
+                            <span id="humidity" class="detail-value">--</span>
+                            <div class="detail-bar"><div id="humidity-bar" class="detail-bar-fill"></div></div>
+                        </div>
+                        <div class="detail-card">
+                            <div class="detail-icon">
+                                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2.5 2.5 0 1 1 19.5 12H2"/></svg>
+                            </div>
+                            <span class="detail-label">Ruzgar Hizi</span>
+                            <span id="wind-speed" class="detail-value">--</span>
+                            <span id="wind-dir" class="detail-sub">--</span>
+                        </div>
+                        <div class="detail-card">
+                            <div class="detail-icon">
+                                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>
+                            </div>
+                            <span class="detail-label">Basinc</span>
+                            <span id="pressure" class="detail-value">--</span>
+                        </div>
+                        <div class="detail-card">
+                            <div class="detail-icon">
+                                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                            </div>
+                            <span class="detail-label">Gorus Mesafesi</span>
+                            <span id="visibility" class="detail-value">--</span>
+                        </div>
+                        <div class="detail-card">
+                            <div class="detail-icon">
+                                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/></svg>
+                            </div>
+                            <span class="detail-label">UV Indeksi</span>
+                            <span id="uv-index" class="detail-value">--</span>
+                            <span id="uv-desc" class="detail-sub">--</span>
+                        </div>
+                        <div class="detail-card">
+                            <div class="detail-icon">
+                                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9z"/></svg>
+                            </div>
+                            <span class="detail-label">Bulutluluk</span>
+                            <span id="clouds" class="detail-value">--</span>
+                        </div>
+                        <div class="detail-card wide">
+                            <div class="detail-icon">
+                                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                            </div>
+                            <span class="detail-label">Gundogumu / Gunbatimi</span>
+                            <div class="sun-times">
+                                <div class="sun-time">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/></svg>
+                                    <span id="sunrise-detail">--</span>
+                                </div>
+                                <div class="sun-arc" id="sun-arc"></div>
+                                <div class="sun-time">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3"/></svg>
+                                    <span id="sunset-detail">--</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="detail-card wide">
+                            <div class="detail-icon">
+                                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 15h4l3-9 4 18 3-9h4"/></svg>
+                            </div>
+                            <span class="detail-label">Hava Kalitesi</span>
+                            <span id="aqi-value" class="detail-value">--</span>
+                            <span id="aqi-desc" class="detail-sub">--</span>
+                            <div class="detail-bar"><div id="aqi-bar" class="detail-bar-fill"></div></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="offline-banner" class="offline-banner" style="display:none">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/><path d="M10.71 5.05A16 16 0 0 1 22.56 9"/><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+                Cevrimdisi - Son kaydedilen veriler gosteriliyor
+            </div>
+        </main>
+
+        <footer class="app-footer">
+            <p>OpenWeatherMap API ile calismaktadir</p>
+        </footer>
+    </div>
+
+    <script src="config.js"></script>
+    <script src="utils.js"></script>
+    <script src="api.js"></script>
+    <script src="animations.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
