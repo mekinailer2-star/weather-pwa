@@ -1,55 +1,35 @@
 const Utils = {
     formatTemp(temp, unit) {
-        const rounded = Math.round(temp);
-        return unit === 'metric' ? `${rounded}°C` : `${rounded}°F`;
-    },
-
-    formatTempValue(temp) {
-        return Math.round(temp);
+        const val = unit === 'imperial' ? this.celsiusToFahrenheit(temp) : temp;
+        return `${Math.round(val)}${unit === 'metric' ? '°C' : '°F'}`;
     },
 
     celsiusToFahrenheit(c) {
-        return (c * 9/5) + 32;
+        return (c * 9 / 5) + 32;
     },
 
-    fahrenheitToCelsius(f) {
-        return (f - 32) * 5/9;
+    formatTime(isoString) {
+        const date = new Date(isoString);
+        return date.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
     },
 
-    formatTime(timestamp, timezone) {
-        const date = new Date((timestamp + timezone) * 1000);
-        return date.toLocaleTimeString('tr-TR', {
-            hour: '2-digit',
-            minute: '2-digit',
-            timeZone: 'UTC'
-        });
-    },
-
-    formatDate(timestamp, timezone) {
-        const date = new Date((timestamp + timezone) * 1000);
+    formatDate(isoString) {
+        const date = new Date(isoString);
         return date.toLocaleDateString('tr-TR', {
-            weekday: 'long',
-            day: 'numeric',
-            month: 'long',
-            timeZone: 'UTC'
+            weekday: 'long', day: 'numeric', month: 'long'
         });
     },
 
-    formatShortDate(timestamp) {
-        const date = new Date(timestamp * 1000);
+    formatShortDate(isoString) {
+        const date = new Date(isoString);
         return date.toLocaleDateString('tr-TR', {
-            weekday: 'short',
-            day: 'numeric',
-            month: 'short'
+            weekday: 'short', day: 'numeric', month: 'short'
         });
     },
 
-    formatHour(timestamp) {
-        const date = new Date(timestamp * 1000);
-        return date.toLocaleTimeString('tr-TR', {
-            hour: '2-digit',
-            minute: '2-digit'
-        });
+    formatHour(isoString) {
+        const date = new Date(isoString);
+        return date.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
     },
 
     getWindDirection(deg) {
@@ -63,17 +43,17 @@ const Utils = {
     },
 
     formatWindSpeed(speed, unit) {
-        if (unit === 'metric') {
-            return `${(speed * 3.6).toFixed(1)} km/s`;
+        if (unit === 'imperial') {
+            return `${(speed * 0.621371).toFixed(1)} mph`;
         }
-        return `${speed.toFixed(1)} mph`;
+        return `${speed.toFixed(1)} km/s`;
     },
 
     formatVisibility(vis) {
         if (vis >= 1000) {
             return `${(vis / 1000).toFixed(1)} km`;
         }
-        return `${vis} m`;
+        return `${Math.round(vis)} m`;
     },
 
     getUVDescription(uv) {
@@ -85,103 +65,90 @@ const Utils = {
     },
 
     getAQIDescription(aqi) {
+        if (aqi <= 20) return { text: 'Iyi', color: '#22c55e', percent: 20 };
+        if (aqi <= 40) return { text: 'Orta', color: '#eab308', percent: 40 };
+        if (aqi <= 60) return { text: 'Hassas', color: '#f97316', percent: 60 };
+        if (aqi <= 80) return { text: 'Sagliksiz', color: '#ef4444', percent: 80 };
+        return { text: 'Tehlikeli', color: '#7c3aed', percent: 100 };
+    },
+
+    wmoToDescription(code) {
         const descs = {
-            1: { text: 'Iyi', color: '#22c55e', percent: 20 },
-            2: { text: 'Orta', color: '#eab308', percent: 40 },
-            3: { text: 'Hassas', color: '#f97316', percent: 60 },
-            4: { text: 'Sagliksiz', color: '#ef4444', percent: 80 },
-            5: { text: 'Tehlikeli', color: '#7c3aed', percent: 100 }
+            0: 'Acik hava',
+            1: 'Genel olarak acik',
+            2: 'Parcali bulutlu',
+            3: 'Kapali',
+            45: 'Sisli',
+            48: 'Kiragi sisli',
+            51: 'Hafif ciseleme',
+            53: 'Orta ciseleme',
+            55: 'Yogun ciseleme',
+            56: 'Hafif donan ciseleme',
+            57: 'Yogun donan ciseleme',
+            61: 'Hafif yagmur',
+            63: 'Orta yagmur',
+            65: 'Siddetli yagmur',
+            66: 'Hafif donan yagmur',
+            67: 'Siddetli donan yagmur',
+            71: 'Hafif kar',
+            73: 'Orta kar',
+            75: 'Yogun kar',
+            77: 'Kar taneleri',
+            80: 'Hafif sagnak',
+            81: 'Orta sagnak',
+            82: 'Siddetli sagnak',
+            85: 'Hafif kar sagnagi',
+            86: 'Siddetli kar sagnagi',
+            95: 'Gok gurultusu',
+            96: 'Dolu ile firtina',
+            99: 'Siddetli dolu firtinasi'
         };
-        return descs[aqi] || descs[1];
+        return descs[code] || 'Bilinmiyor';
     },
 
-    getWeatherIcon(code, isDay) {
-        const icons = {
-            '01d': 'clear-day', '01n': 'clear-night',
-            '02d': 'partly-cloudy-day', '02n': 'partly-cloudy-night',
-            '03d': 'cloudy', '03n': 'cloudy',
-            '04d': 'overcast', '04n': 'overcast',
-            '09d': 'rain', '09n': 'rain',
-            '10d': 'rain-sun', '10n': 'rain-night',
-            '11d': 'thunderstorm', '11n': 'thunderstorm',
-            '13d': 'snow', '13n': 'snow',
-            '50d': 'mist', '50n': 'mist'
-        };
-        return icons[code] || 'cloudy';
-    },
-
-    getWeatherCondition(code) {
-        const id = parseInt(code);
-        if (id >= 200 && id < 300) return 'thunderstorm';
-        if (id >= 300 && id < 400) return 'drizzle';
-        if (id >= 500 && id < 600) return 'rain';
-        if (id >= 600 && id < 700) return 'snow';
-        if (id >= 700 && id < 800) return 'mist';
-        if (id === 800) return 'clear';
-        if (id > 800) return 'clouds';
+    wmoToCondition(code) {
+        if (code === 0 || code === 1) return 'clear';
+        if (code === 2 || code === 3) return 'clouds';
+        if (code === 45 || code === 48) return 'mist';
+        if (code >= 51 && code <= 57) return 'drizzle';
+        if (code >= 61 && code <= 67) return 'rain';
+        if (code >= 71 && code <= 77) return 'snow';
+        if (code >= 80 && code <= 82) return 'rain';
+        if (code >= 85 && code <= 86) return 'snow';
+        if (code >= 95) return 'thunderstorm';
         return 'clear';
     },
 
+    wmoToIconKey(code, isDay) {
+        const condition = this.wmoToCondition(code);
+        const dayStr = isDay ? 'day' : 'night';
+        const map = {
+            'clear': isDay ? 'clear-day' : 'clear-night',
+            'clouds': isDay ? 'partly-cloudy-day' : 'partly-cloudy-night',
+            'mist': 'mist',
+            'drizzle': 'rain',
+            'rain': isDay ? 'rain-sun' : 'rain-night',
+            'snow': 'snow',
+            'thunderstorm': 'thunderstorm'
+        };
+        if (code === 3) return 'overcast';
+        return map[condition] || 'cloudy';
+    },
+
     capitalizeFirst(str) {
+        if (!str) return '';
         return str.charAt(0).toUpperCase() + str.slice(1);
     },
 
     debounce(fn, delay) {
         let timer;
-        return function(...args) {
+        return function (...args) {
             clearTimeout(timer);
             timer = setTimeout(() => fn.apply(this, args), delay);
         };
     },
 
-    isNight(current, sunrise, sunset) {
-        return current < sunrise || current > sunset;
-    },
-
-    getDayFromTimestamp(ts) {
-        return new Date(ts * 1000).toLocaleDateString('tr-TR', { weekday: 'short' });
-    },
-
-    groupForecastByDay(list) {
-        const days = {};
-        list.forEach(item => {
-            const date = new Date(item.dt * 1000).toLocaleDateString('tr-TR');
-            if (!days[date]) {
-                days[date] = {
-                    dt: item.dt,
-                    temps: [],
-                    icons: [],
-                    descriptions: [],
-                    items: []
-                };
-            }
-            days[date].temps.push(item.main.temp);
-            days[date].icons.push(item.weather[0].icon);
-            days[date].descriptions.push(item.weather[0].description);
-            days[date].items.push(item);
-        });
-
-        return Object.values(days).map(day => ({
-            dt: day.dt,
-            temp_max: Math.max(...day.temps),
-            temp_min: Math.min(...day.temps),
-            icon: Utils.getMostFrequent(day.icons),
-            description: Utils.capitalizeFirst(Utils.getMostFrequent(day.descriptions)),
-            items: day.items
-        }));
-    },
-
-    getMostFrequent(arr) {
-        const freq = {};
-        let maxCount = 0;
-        let maxItem = arr[0];
-        arr.forEach(item => {
-            freq[item] = (freq[item] || 0) + 1;
-            if (freq[item] > maxCount) {
-                maxCount = freq[item];
-                maxItem = item;
-            }
-        });
-        return maxItem;
+    isNightNow(isDay) {
+        return !isDay;
     }
 };
