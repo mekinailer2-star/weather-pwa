@@ -1,4 +1,10 @@
 const Utils = {
+    escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    },
+
     formatTemp(temp, unit) {
         const val = unit === 'imperial' ? this.celsiusToFahrenheit(temp) : temp;
         return `${Math.round(val)}${unit === 'metric' ? '°C' : '°F'}`;
@@ -46,7 +52,7 @@ const Utils = {
         if (unit === 'imperial') {
             return `${(speed * 0.621371).toFixed(1)} mph`;
         }
-        return `${speed.toFixed(1)} km/s`;
+        return `${speed.toFixed(1)} km/h`;
     },
 
     formatVisibility(vis) {
