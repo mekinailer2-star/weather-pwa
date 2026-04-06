@@ -208,12 +208,13 @@ const App = {
                 const lat = pos.coords.latitude;
                 const lon = pos.coords.longitude;
                 try {
-                    const resp = await fetch(`https://geocoding-api.open-meteo.com/v1/search?latitude=${lat}&longitude=${lon}&count=1&language=tr&format=json`);
+                    const resp = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&accept-language=tr`);
                     if (resp.ok) {
                         const data = await resp.json();
-                        if (data.results && data.results.length > 0) {
-                            const city = data.results[0];
-                            this.loadWeatherByCoords(lat, lon, city.name, city.country || '');
+                        const cityName = data.address?.city || data.address?.town || data.address?.village || data.address?.state || '';
+                        const countryCode = data.address?.country_code?.toUpperCase() || '';
+                        if (cityName) {
+                            this.loadWeatherByCoords(lat, lon, cityName, countryCode);
                             return;
                         }
                     }
