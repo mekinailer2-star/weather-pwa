@@ -34,7 +34,13 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
     const url = new URL(event.request.url);
 
-    if (url.origin === 'https://api.openweathermap.org') {
+    const apiOrigins = [
+        'https://api.open-meteo.com',
+        'https://air-quality-api.open-meteo.com',
+        'https://geocoding-api.open-meteo.com'
+    ];
+
+    if (apiOrigins.some(origin => url.origin === origin)) {
         event.respondWith(networkFirstStrategy(event.request));
     } else {
         event.respondWith(cacheFirstStrategy(event.request));
