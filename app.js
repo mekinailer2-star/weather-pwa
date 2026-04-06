@@ -142,7 +142,7 @@ const App = {
             return;
         }
         container.innerHTML = cities.map(city =>
-            `<div class="suggestion-item" data-name="${city.name}" data-lat="${city.lat}" data-lon="${city.lon}" data-country="${city.country}">${city.display}</div>`
+            `<div class="suggestion-item" data-name="${Utils.escapeHtml(city.name)}" data-lat="${city.lat}" data-lon="${city.lon}" data-country="${Utils.escapeHtml(city.country)}">${Utils.escapeHtml(city.display)}</div>`
         ).join('');
         container.querySelectorAll('.suggestion-item').forEach(item => {
             item.addEventListener('click', () => {
@@ -433,11 +433,19 @@ const App = {
         }
     },
 
+    _matchesCityKey(stored, name, lat, lon) {
+        const parts = this._parseCityKey(stored);
+        if (parts.lat && parts.lon) {
+            return Math.abs(parts.lat - lat) < 0.01 && Math.abs(parts.lon - lon) < 0.01;
+        }
+        return parts.name === name;
+    },
+
     toggleFavorite() {
         const city = this.state.currentCity;
         if (!city) return;
         const favKey = `${city}|${this.state.lat}|${this.state.lon}|${this.state.currentCountry}`;
-        const idx = this.state.favorites.findIndex(f => f.startsWith(city + '|'));
+        const idx = this.state.favorites.findIndex(f => this._matchesCityKey(f, city, this.state.lat, this.state.lon));
         if (idx > -1) {
             this.state.favorites.splice(idx, 1);
         } else {
@@ -451,14 +459,14 @@ const App = {
     },
 
     updateFavButton() {
-        const isFav = this.state.favorites.some(f => f.startsWith(this.state.currentCity + '|'));
+        const isFav = this.state.favorites.some(f => this._matchesCityKey(f, this.state.currentCity, this.state.lat, this.state.lon));
         this.elements.fav_btn.classList.toggle('active', isFav);
     },
 
     addToHistory(city) {
         if (!city) return;
         const histKey = `${city}|${this.state.lat}|${this.state.lon}|${this.state.currentCountry}`;
-        this.state.history = this.state.history.filter(h => !h.startsWith(city + '|'));
+        this.state.history = this.state.history.filter(h => !this._matchesCityKey(h, city, this.state.lat, this.state.lon));
         this.state.history.unshift(histKey);
         if (this.state.history.length > CONFIG.MAX_HISTORY) {
             this.state.history = this.state.history.slice(0, CONFIG.MAX_HISTORY);
@@ -490,8 +498,8 @@ const App = {
             const c = this._parseCityKey(fav);
             return `
                 <li class="city-item">
-                    <span class="city-item-name" data-lat="${c.lat}" data-lon="${c.lon}" data-name="${c.name}" data-country="${c.country}">${c.name}${c.country ? ', ' + c.country : ''}</span>
-                    <button class="city-item-remove" data-remove-fav="${c.name}">&times;</button>
+                    <span class="city-item-name" data-lat="${c.lat}" data-lon="${c.lon}" data-name="${Utils.escapeHtml(c.name)}" data-country="${Utils.escapeHtml(c.country)}">${Utils.escapeHtml(c.name)}${c.country ? ', ' + Utils.escapeHtml(c.country) : ''}</span>
+                    <button class="city-item-remove" data-remove-lat="${c.lat}" data-remove-lon="${c.lon}" data-remove-name="${Utils.escapeHtml(c.name)}">&times;</button>
                 </li>
             `;
         }).join('');
@@ -504,7 +512,7 @@ const App = {
         list.querySelectorAll('.city-item-remove').forEach(el => {
             el.addEventListener('click', e => {
                 e.stopPropagation();
-                this.state.favorites = this.state.favorites.filter(f => !f.startsWith(el.dataset.removeFav + '|'));
+                this.state.favorites = this.state.favorites.filter(f => !this._matchesCityKey(f, el.dataset.removeName, parseFloat(el.dataset.removeLat), parseFloat(el.dataset.removeLon)));
                 localStorage.setItem('favorites', JSON.stringify(this.state.favorites));
                 this.renderFavorites();
                 this.updateFavButton();
@@ -528,7 +536,7 @@ const App = {
             const c = this._parseCityKey(h);
             return `
                 <li class="city-item">
-                    <span class="city-item-name" data-lat="${c.lat}" data-lon="${c.lon}" data-name="${c.name}" data-country="${c.country}">${c.name}${c.country ? ', ' + c.country : ''}</span>
+                    <span class="city-item-name" data-lat="${c.lat}" data-lon="${c.lon}" data-name="${Utils.escapeHtml(c.name)}" data-country="${Utils.escapeHtml(c.country)}">${Utils.escapeHtml(c.name)}${c.country ? ', ' + Utils.escapeHtml(c.country) : ''}</span>
                 </li>
             `;
         }).join('');
