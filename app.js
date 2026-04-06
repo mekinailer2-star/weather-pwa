@@ -208,23 +208,17 @@ const App = {
                 const lat = pos.coords.latitude;
                 const lon = pos.coords.longitude;
                 try {
-                    const results = await WeatherAPI.searchCities(`${lat},${lon}`);
-                    let cityName = CONFIG.DEFAULT_CITY;
-                    let country = 'TR';
-                    const geoParams = new URLSearchParams({
-                        name: `${lat.toFixed(2)}`,
-                        count: 1,
-                        language: 'tr',
-                        format: 'json'
-                    });
-                    try {
-                        const reverseUrl = `https://geocoding-api.open-meteo.com/v1/search?latitude=${lat}&longitude=${lon}&count=1&language=tr&format=json`;
-                        const resp = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(CONFIG.DEFAULT_CITY)}&count=1&language=tr`);
-                    } catch {}
-                    this.loadWeatherByCoords(lat, lon, '', '');
-                } catch {
-                    this.loadWeatherByCoords(lat, lon, '', '');
-                }
+                    const resp = await fetch(`https://geocoding-api.open-meteo.com/v1/search?latitude=${lat}&longitude=${lon}&count=1&language=tr&format=json`);
+                    if (resp.ok) {
+                        const data = await resp.json();
+                        if (data.results && data.results.length > 0) {
+                            const city = data.results[0];
+                            this.loadWeatherByCoords(lat, lon, city.name, city.country || '');
+                            return;
+                        }
+                    }
+                } catch {}
+                this.loadWeatherByCoords(lat, lon, `${lat.toFixed(2)}, ${lon.toFixed(2)}`, '');
             },
             () => this.loadWeatherByCoords(CONFIG.DEFAULT_LAT, CONFIG.DEFAULT_LON, CONFIG.DEFAULT_CITY, 'TR'),
             { timeout: 10000 }
