@@ -1,13 +1,15 @@
 const App = {
     state: {
         currentCity: '',
+        currentCountry: '',
         unit: 'metric',
         theme: 'light',
         favorites: [],
         history: [],
-        currentData: null,
-        forecastData: null,
-        aqiData: null
+        weatherData: null,
+        aqiData: null,
+        lat: null,
+        lon: null
     },
 
     elements: {},
@@ -21,8 +23,12 @@ const App = {
         this.registerServiceWorker();
 
         const lastCity = localStorage.getItem('lastCity');
-        if (lastCity) {
-            this.loadWeather(lastCity);
+        const lastLat = localStorage.getItem('lastLat');
+        const lastLon = localStorage.getItem('lastLon');
+        if (lastLat && lastLon) {
+            this.state.currentCity = lastCity || '';
+            this.state.currentCountry = localStorage.getItem('lastCountry') || '';
+            this.loadWeatherByCoords(parseFloat(lastLat), parseFloat(lastLon), lastCity, localStorage.getItem('lastCountry') || '');
         } else {
             this.getCurrentLocation();
         }
@@ -30,16 +36,16 @@ const App = {
 
     cacheElements() {
         const ids = [
-            'search-input','search-clear','search-suggestions','menu-btn','sidebar',
-            'sidebar-overlay','sidebar-close','favorites-list','history-list','no-favorites',
-            'no-history','clear-history','loading','error-container','error-message','retry-btn',
-            'weather-content','city-name','current-date','fav-btn','weather-icon-main',
-            'current-temp','weather-desc','temp-max','temp-min','feels-like','sunrise',
-            'sunset','feels-like-card','wind-card','hourly-scroll','forecast-list',
-            'humidity','humidity-bar','wind-speed','wind-dir','pressure','visibility',
-            'uv-index','uv-desc','clouds','sunrise-detail','sunset-detail','aqi-value',
-            'aqi-desc','aqi-bar','unit-toggle','theme-toggle','theme-icon-light',
-            'theme-icon-dark','location-btn','offline-banner','weather-bg'
+            'search-input', 'search-clear', 'search-suggestions', 'menu-btn', 'sidebar',
+            'sidebar-overlay', 'sidebar-close', 'favorites-list', 'history-list', 'no-favorites',
+            'no-history', 'clear-history', 'loading', 'error-container', 'error-message', 'retry-btn',
+            'weather-content', 'city-name', 'current-date', 'fav-btn', 'weather-icon-main',
+            'current-temp', 'weather-desc', 'temp-max', 'temp-min', 'feels-like', 'sunrise',
+            'sunset', 'feels-like-card', 'wind-card', 'hourly-scroll', 'forecast-list',
+            'humidity', 'humidity-bar', 'wind-speed', 'wind-dir', 'pressure', 'visibility',
+            'uv-index', 'uv-desc', 'clouds', 'sunrise-detail', 'sunset-detail', 'aqi-value',
+            'aqi-desc', 'aqi-bar', 'unit-toggle', 'theme-toggle', 'theme-icon-light',
+            'theme-icon-dark', 'location-btn', 'offline-banner', 'weather-bg'
         ];
         ids.forEach(id => {
             this.elements[id.replace(/-/g, '_')] = document.getElementById(id);
@@ -68,7 +74,7 @@ const App = {
         searchInput.addEventListener('input', Utils.debounce(() => this.handleSearch(), 300));
         searchInput.addEventListener('keydown', e => {
             if (e.key === 'Enter' && searchInput.value.trim()) {
-                this.loadWeather(searchInput.value.trim());
+                this.loadWeatherByCity(searchInput.value.trim());
                 this.closeSuggestions();
             }
         });
@@ -91,8 +97,11 @@ const App = {
         this.elements.location_btn.addEventListener('click', () => this.getCurrentLocation());
         this.elements.fav_btn.addEventListener('click', () => this.toggleFavorite());
         this.elements.retry_btn.addEventListener('click', () => {
-            const lastCity = localStorage.getItem('lastCity') || CONFIG.DEFAULT_CITY;
-            this.loadWeather(lastCity);
+            if (this.state.lat && this.state.lon) {
+                this.loadWeatherByCoords(this.state.lat, this.state.lon, this.state.currentCity, this.state.currentCountry);
+            } else {
+                this.loadWeatherByCity(CONFIG.DEFAULT_CITY);
+            }
         });
         this.elements.clear_history.addEventListener('click', () => this.clearHistory());
 
@@ -106,8 +115,9 @@ const App = {
 
         window.addEventListener('online', () => {
             this.elements.offline_banner.style.display = 'none';
-            const lastCity = localStorage.getItem('lastCity');
-            if (lastCity) this.loadWeather(lastCity);
+            if (this.state.lat && this.state.lon) {
+                this.loadWeatherByCoords(this.state.lat, this.state.lon, this.state.currentCity, this.state.currentCountry);
+            }
         });
         window.addEventListener('offline', () => {
             this.elements.offline_banner.style.display = 'flex';
@@ -132,12 +142,16 @@ const App = {
             return;
         }
         container.innerHTML = cities.map(city =>
-            `<div class="suggestion-item" data-name="${city.name}" data-lat="${city.lat}" data-lon="${city.lon}">${city.display}</div>`
+            `<div class="suggestion-item" data-name="${city.name}" data-lat="${city.lat}" data-lon="${city.lon}" data-country="${city.country}">${city.display}</div>`
         ).join('');
         container.querySelectorAll('.suggestion-item').forEach(item => {
             item.addEventListener('click', () => {
-                this.elements.search_input.value = item.dataset.name;
-                this.loadWeather(item.dataset.name);
+                const name = item.dataset.name;
+                const lat = parseFloat(item.dataset.lat);
+                const lon = parseFloat(item.dataset.lon);
+                const country = item.dataset.country;
+                this.elements.search_input.value = name;
+                this.loadWeatherByCoords(lat, lon, name, country);
                 this.closeSuggestions();
             });
         });
@@ -147,52 +161,36 @@ const App = {
         this.elements.search_suggestions.innerHTML = '';
     },
 
-    async loadWeather(city) {
+    async loadWeatherByCity(cityName) {
         this.showLoading();
         try {
-            const [current, forecast] = await Promise.all([
-                WeatherAPI.getCurrentWeather(city),
-                WeatherAPI.getForecast(city)
-            ]);
-
-            let aqi = null;
-            try {
-                aqi = await WeatherAPI.getAirPollution(current.coord.lat, current.coord.lon);
-            } catch {}
-
-            this.state.currentData = current;
-            this.state.forecastData = forecast;
-            this.state.aqiData = aqi;
-            this.state.currentCity = current.name;
-
-            localStorage.setItem('lastCity', current.name);
-            this.addToHistory(current.name);
-            this.render();
+            const geo = await WeatherAPI.geocodeCity(cityName);
+            await this.loadWeatherByCoords(geo.lat, geo.lon, geo.name, geo.country);
         } catch (error) {
             this.showError(error.message);
         }
     },
 
-    async loadWeatherByCoords(lat, lon) {
+    async loadWeatherByCoords(lat, lon, cityName, country) {
         this.showLoading();
         try {
-            const [current, forecast] = await Promise.all([
-                WeatherAPI.getCurrentWeatherByCoords(lat, lon),
-                WeatherAPI.getForecastByCoords(lat, lon)
+            const [weather, aqi] = await Promise.all([
+                WeatherAPI.getWeatherByCoords(lat, lon),
+                WeatherAPI.getAirQuality(lat, lon)
             ]);
 
-            let aqi = null;
-            try {
-                aqi = await WeatherAPI.getAirPollution(lat, lon);
-            } catch {}
-
-            this.state.currentData = current;
-            this.state.forecastData = forecast;
+            this.state.weatherData = weather;
             this.state.aqiData = aqi;
-            this.state.currentCity = current.name;
+            this.state.lat = lat;
+            this.state.lon = lon;
+            this.state.currentCity = cityName || 'Bilinmiyor';
+            this.state.currentCountry = country || '';
 
-            localStorage.setItem('lastCity', current.name);
-            this.addToHistory(current.name);
+            localStorage.setItem('lastCity', this.state.currentCity);
+            localStorage.setItem('lastCountry', this.state.currentCountry);
+            localStorage.setItem('lastLat', lat.toString());
+            localStorage.setItem('lastLon', lon.toString());
+            this.addToHistory(this.state.currentCity);
             this.render();
         } catch (error) {
             this.showError(error.message);
@@ -201,34 +199,51 @@ const App = {
 
     getCurrentLocation() {
         if (!navigator.geolocation) {
-            this.loadWeather(CONFIG.DEFAULT_CITY);
+            this.loadWeatherByCoords(CONFIG.DEFAULT_LAT, CONFIG.DEFAULT_LON, CONFIG.DEFAULT_CITY, 'TR');
             return;
         }
         this.showLoading();
         navigator.geolocation.getCurrentPosition(
-            pos => this.loadWeatherByCoords(pos.coords.latitude, pos.coords.longitude),
-            () => this.loadWeather(CONFIG.DEFAULT_CITY),
+            async pos => {
+                const lat = pos.coords.latitude;
+                const lon = pos.coords.longitude;
+                try {
+                    const results = await WeatherAPI.searchCities(`${lat},${lon}`);
+                    let cityName = CONFIG.DEFAULT_CITY;
+                    let country = 'TR';
+                    const geoParams = new URLSearchParams({
+                        name: `${lat.toFixed(2)}`,
+                        count: 1,
+                        language: 'tr',
+                        format: 'json'
+                    });
+                    try {
+                        const reverseUrl = `https://geocoding-api.open-meteo.com/v1/search?latitude=${lat}&longitude=${lon}&count=1&language=tr&format=json`;
+                        const resp = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(CONFIG.DEFAULT_CITY)}&count=1&language=tr`);
+                    } catch {}
+                    this.loadWeatherByCoords(lat, lon, '', '');
+                } catch {
+                    this.loadWeatherByCoords(lat, lon, '', '');
+                }
+            },
+            () => this.loadWeatherByCoords(CONFIG.DEFAULT_LAT, CONFIG.DEFAULT_LON, CONFIG.DEFAULT_CITY, 'TR'),
             { timeout: 10000 }
         );
     },
 
     render() {
-        const { currentData: data, forecastData: forecast, aqiData: aqi } = this.state;
-        if (!data) return;
+        const data = this.state.weatherData;
+        if (!data || !data.current) return;
 
-        const isNight = Utils.isNight(data.dt, data.sys.sunrise, data.sys.sunset);
-        const condition = Utils.getWeatherCondition(data.weather[0].id);
-        const iconKey = Utils.getWeatherIcon(data.weather[0].icon, !isNight);
+        const isDay = !!data.current.is_day;
+        const condition = Utils.wmoToCondition(data.current.weather_code);
+        const iconKey = Utils.wmoToIconKey(data.current.weather_code, isDay);
 
-        if (isNight && this.state.theme === 'light') {
-            // keep user preference
-        }
-
-        WeatherAnimations.setCondition(condition, isNight);
-        this.renderCurrent(data, iconKey);
-        this.renderHourly(forecast);
-        this.renderForecast(forecast);
-        this.renderDetails(data, aqi);
+        WeatherAnimations.setCondition(condition, !isDay);
+        this.renderCurrent(data, iconKey, isDay);
+        this.renderHourly(data);
+        this.renderForecast(data);
+        this.renderDetails(data);
         this.updateFavButton();
 
         this.elements.loading.style.display = 'none';
@@ -236,90 +251,139 @@ const App = {
         this.elements.weather_content.style.display = 'block';
     },
 
-    renderCurrent(data, iconKey) {
-        this.elements.city_name.textContent = `${data.name}, ${data.sys.country}`;
-        this.elements.current_date.textContent = Utils.formatDate(data.dt, data.timezone);
+    renderCurrent(data, iconKey, isDay) {
+        const c = data.current;
+        const d = data.daily;
+        const cityDisplay = this.state.currentCountry
+            ? `${this.state.currentCity}, ${this.state.currentCountry}`
+            : this.state.currentCity || `${this.state.lat.toFixed(2)}, ${this.state.lon.toFixed(2)}`;
 
+        this.elements.city_name.textContent = cityDisplay;
+        this.elements.current_date.textContent = Utils.formatDate(c.time);
         this.elements.weather_icon_main.innerHTML = WeatherAnimations.getWeatherIconSVG(iconKey);
 
-        const temp = this.state.unit === 'metric' ? data.main.temp : Utils.celsiusToFahrenheit(data.main.temp);
-        const feelsLike = this.state.unit === 'metric' ? data.main.feels_like : Utils.celsiusToFahrenheit(data.main.feels_like);
-        const tempMax = this.state.unit === 'metric' ? data.main.temp_max : Utils.celsiusToFahrenheit(data.main.temp_max);
-        const tempMin = this.state.unit === 'metric' ? data.main.temp_min : Utils.celsiusToFahrenheit(data.main.temp_min);
-        const unitSym = this.state.unit === 'metric' ? '°C' : '°F';
+        const temp = this.state.unit === 'metric' ? c.temperature_2m : Utils.celsiusToFahrenheit(c.temperature_2m);
+        const feelsLike = this.state.unit === 'metric' ? c.apparent_temperature : Utils.celsiusToFahrenheit(c.apparent_temperature);
+        const tempMax = this.state.unit === 'metric' ? d.temperature_2m_max[0] : Utils.celsiusToFahrenheit(d.temperature_2m_max[0]);
+        const tempMin = this.state.unit === 'metric' ? d.temperature_2m_min[0] : Utils.celsiusToFahrenheit(d.temperature_2m_min[0]);
+        const sym = this.state.unit === 'metric' ? '°C' : '°F';
 
-        this.elements.current_temp.textContent = `${Math.round(temp)}${unitSym}`;
-        this.elements.weather_desc.textContent = Utils.capitalizeFirst(data.weather[0].description);
+        this.elements.current_temp.textContent = `${Math.round(temp)}${sym}`;
+        this.elements.weather_desc.textContent = Utils.capitalizeFirst(Utils.wmoToDescription(c.weather_code));
 
-        this.elements.temp_max.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg> ${Math.round(tempMax)}${unitSym}`;
-        this.elements.temp_min.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg> ${Math.round(tempMin)}${unitSym}`;
-        this.elements.feels_like.textContent = `Hissedilen: ${Math.round(feelsLike)}${unitSym}`;
+        this.elements.temp_max.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg> ${Math.round(tempMax)}${sym}`;
+        this.elements.temp_min.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg> ${Math.round(tempMin)}${sym}`;
+        this.elements.feels_like.textContent = `Hissedilen: ${Math.round(feelsLike)}${sym}`;
 
-        this.elements.sunrise.textContent = Utils.formatTime(data.sys.sunrise, data.timezone);
-        this.elements.sunset.textContent = Utils.formatTime(data.sys.sunset, data.timezone);
-        this.elements.feels_like_card.textContent = `${Math.round(feelsLike)}${unitSym}`;
-        this.elements.wind_card.textContent = Utils.formatWindSpeed(data.wind.speed, this.state.unit);
+        this.elements.sunrise.textContent = Utils.formatTime(d.sunrise[0]);
+        this.elements.sunset.textContent = Utils.formatTime(d.sunset[0]);
+        this.elements.feels_like_card.textContent = `${Math.round(feelsLike)}${sym}`;
+        this.elements.wind_card.textContent = Utils.formatWindSpeed(c.wind_speed_10m, this.state.unit);
     },
 
-    renderHourly(forecast) {
-        const hours = forecast.list.slice(0, 8);
+    renderHourly(data) {
+        const now = new Date();
+        const hourly = data.hourly;
+        let startIdx = 0;
+        for (let i = 0; i < hourly.time.length; i++) {
+            if (new Date(hourly.time[i]) >= now) {
+                startIdx = i;
+                break;
+            }
+        }
+        const hours = [];
+        for (let i = startIdx; i < Math.min(startIdx + 24, hourly.time.length); i++) {
+            hours.push({
+                time: hourly.time[i],
+                temp: hourly.temperature_2m[i],
+                code: hourly.weather_code[i],
+                isDay: hourly.is_day[i]
+            });
+        }
+
         this.elements.hourly_scroll.innerHTML = hours.map((item, i) => {
-            const iconKey = Utils.getWeatherIcon(item.weather[0].icon, true);
-            const temp = this.state.unit === 'metric' ? item.main.temp : Utils.celsiusToFahrenheit(item.main.temp);
-            const unitSym = this.state.unit === 'metric' ? '°' : '°F';
+            const iconKey = Utils.wmoToIconKey(item.code, !!item.isDay);
+            const temp = this.state.unit === 'metric' ? item.temp : Utils.celsiusToFahrenheit(item.temp);
+            const sym = this.state.unit === 'metric' ? '°' : '°F';
             return `
                 <div class="hourly-item ${i === 0 ? 'now' : ''}">
-                    <span class="hourly-time">${i === 0 ? 'Simdi' : Utils.formatHour(item.dt)}</span>
+                    <span class="hourly-time">${i === 0 ? 'Simdi' : Utils.formatHour(item.time)}</span>
                     <div class="hourly-icon">${WeatherAnimations.getWeatherIconSVG(iconKey)}</div>
-                    <span class="hourly-temp">${Math.round(temp)}${unitSym}</span>
+                    <span class="hourly-temp">${Math.round(temp)}${sym}</span>
                 </div>
             `;
         }).join('');
     },
 
-    renderForecast(forecast) {
-        const days = Utils.groupForecastByDay(forecast.list);
+    renderForecast(data) {
+        const d = data.daily;
+        const days = [];
+        for (let i = 0; i < d.time.length; i++) {
+            days.push({
+                date: d.time[i],
+                code: d.weather_code[i],
+                max: d.temperature_2m_max[i],
+                min: d.temperature_2m_min[i],
+                precip: d.precipitation_probability_max ? d.precipitation_probability_max[i] : null
+            });
+        }
+
         this.elements.forecast_list.innerHTML = days.map(day => {
-            const iconKey = Utils.getWeatherIcon(day.icon, true);
-            const tempMax = this.state.unit === 'metric' ? day.temp_max : Utils.celsiusToFahrenheit(day.temp_max);
-            const tempMin = this.state.unit === 'metric' ? day.temp_min : Utils.celsiusToFahrenheit(day.temp_min);
-            const unitSym = this.state.unit === 'metric' ? '°' : '°F';
+            const iconKey = Utils.wmoToIconKey(day.code, true);
+            const tempMax = this.state.unit === 'metric' ? day.max : Utils.celsiusToFahrenheit(day.max);
+            const tempMin = this.state.unit === 'metric' ? day.min : Utils.celsiusToFahrenheit(day.min);
+            const sym = this.state.unit === 'metric' ? '°' : '°F';
+            const desc = Utils.capitalizeFirst(Utils.wmoToDescription(day.code));
             return `
                 <div class="forecast-item">
-                    <span class="forecast-day">${Utils.formatShortDate(day.dt)}</span>
+                    <span class="forecast-day">${Utils.formatShortDate(day.date)}</span>
                     <div class="forecast-icon">${WeatherAnimations.getWeatherIconSVG(iconKey)}</div>
-                    <span class="forecast-desc">${day.description}</span>
+                    <span class="forecast-desc">${desc}${day.precip !== null ? ` (%${day.precip})` : ''}</span>
                     <div class="forecast-temps">
-                        <span class="forecast-max">${Math.round(tempMax)}${unitSym}</span>
-                        <span class="forecast-min">${Math.round(tempMin)}${unitSym}</span>
+                        <span class="forecast-max">${Math.round(tempMax)}${sym}</span>
+                        <span class="forecast-min">${Math.round(tempMin)}${sym}</span>
                     </div>
                 </div>
             `;
         }).join('');
     },
 
-    renderDetails(data, aqi) {
-        this.elements.humidity.textContent = `%${data.main.humidity}`;
-        this.elements.humidity_bar.style.width = `${data.main.humidity}%`;
-        this.elements.humidity_bar.style.background = data.main.humidity > 70 ? '#3b82f6' : data.main.humidity > 40 ? '#22c55e' : '#f59e0b';
+    renderDetails(data) {
+        const c = data.current;
+        const d = data.daily;
 
-        this.elements.wind_speed.textContent = Utils.formatWindSpeed(data.wind.speed, this.state.unit);
-        this.elements.wind_dir.textContent = data.wind.deg !== undefined ? `${Utils.getWindDirectionFull(data.wind.deg)} (${data.wind.deg}°)` : '--';
+        this.elements.humidity.textContent = `%${c.relative_humidity_2m}`;
+        this.elements.humidity_bar.style.width = `${c.relative_humidity_2m}%`;
+        this.elements.humidity_bar.style.background = c.relative_humidity_2m > 70 ? '#3b82f6' : c.relative_humidity_2m > 40 ? '#22c55e' : '#f59e0b';
 
-        this.elements.pressure.textContent = `${data.main.pressure} hPa`;
-        this.elements.visibility.textContent = data.visibility !== undefined ? Utils.formatVisibility(data.visibility) : '--';
-        this.elements.clouds.textContent = `%${data.clouds.all}`;
+        this.elements.wind_speed.textContent = Utils.formatWindSpeed(c.wind_speed_10m, this.state.unit);
+        this.elements.wind_dir.textContent = c.wind_direction_10m !== undefined
+            ? `${Utils.getWindDirectionFull(c.wind_direction_10m)} (${c.wind_direction_10m}°)`
+            : '--';
 
-        this.elements.sunrise_detail.textContent = Utils.formatTime(data.sys.sunrise, data.timezone);
-        this.elements.sunset_detail.textContent = Utils.formatTime(data.sys.sunset, data.timezone);
+        this.elements.pressure.textContent = `${Math.round(c.surface_pressure)} hPa`;
+        this.elements.visibility.textContent = c.visibility !== undefined ? Utils.formatVisibility(c.visibility) : '--';
+        this.elements.clouds.textContent = `%${c.cloud_cover}`;
 
-        this.elements.uv_index.textContent = '--';
-        this.elements.uv_desc.textContent = 'Veri yok';
+        this.elements.sunrise_detail.textContent = Utils.formatTime(d.sunrise[0]);
+        this.elements.sunset_detail.textContent = Utils.formatTime(d.sunset[0]);
 
-        if (aqi && aqi.list && aqi.list.length > 0) {
-            const aqiVal = aqi.list[0].main.aqi;
+        const uvMax = d.uv_index_max ? d.uv_index_max[0] : null;
+        if (uvMax !== null) {
+            const uvInfo = Utils.getUVDescription(uvMax);
+            this.elements.uv_index.textContent = uvMax.toFixed(1);
+            this.elements.uv_desc.textContent = uvInfo.text;
+            this.elements.uv_desc.style.color = uvInfo.color;
+        } else {
+            this.elements.uv_index.textContent = '--';
+            this.elements.uv_desc.textContent = 'Veri yok';
+        }
+
+        const aqi = this.state.aqiData;
+        if (aqi && aqi.current && aqi.current.european_aqi !== undefined) {
+            const aqiVal = aqi.current.european_aqi;
             const aqiInfo = Utils.getAQIDescription(aqiVal);
-            this.elements.aqi_value.textContent = aqiVal;
+            this.elements.aqi_value.textContent = Math.round(aqiVal);
             this.elements.aqi_desc.textContent = aqiInfo.text;
             this.elements.aqi_desc.style.color = aqiInfo.color;
             this.elements.aqi_bar.style.width = `${aqiInfo.percent}%`;
@@ -350,7 +414,7 @@ const App = {
         this.state.unit = this.state.unit === 'metric' ? 'imperial' : 'metric';
         localStorage.setItem('unit', this.state.unit);
         this.elements.unit_toggle.textContent = this.state.unit === 'metric' ? '°C' : '°F';
-        if (this.state.currentData) this.render();
+        if (this.state.weatherData) this.render();
     },
 
     toggleTheme() {
@@ -368,34 +432,39 @@ const App = {
             this.elements.theme_icon_light.style.display = 'block';
             this.elements.theme_icon_dark.style.display = 'none';
         }
-        document.querySelector('meta[name="theme-color"]').setAttribute('content',
-            this.state.theme === 'dark' ? '#0f172a' : '#4A90D9');
+        const metaTheme = document.querySelector('meta[name="theme-color"]');
+        if (metaTheme) {
+            metaTheme.setAttribute('content', this.state.theme === 'dark' ? '#0f172a' : '#4A90D9');
+        }
     },
 
     toggleFavorite() {
         const city = this.state.currentCity;
         if (!city) return;
-        const idx = this.state.favorites.indexOf(city);
+        const favKey = `${city}|${this.state.lat}|${this.state.lon}|${this.state.currentCountry}`;
+        const idx = this.state.favorites.findIndex(f => f.startsWith(city + '|'));
         if (idx > -1) {
             this.state.favorites.splice(idx, 1);
         } else {
             if (this.state.favorites.length >= CONFIG.MAX_FAVORITES) {
                 this.state.favorites.pop();
             }
-            this.state.favorites.unshift(city);
+            this.state.favorites.unshift(favKey);
         }
         localStorage.setItem('favorites', JSON.stringify(this.state.favorites));
         this.updateFavButton();
     },
 
     updateFavButton() {
-        const isFav = this.state.favorites.includes(this.state.currentCity);
+        const isFav = this.state.favorites.some(f => f.startsWith(this.state.currentCity + '|'));
         this.elements.fav_btn.classList.toggle('active', isFav);
     },
 
     addToHistory(city) {
-        this.state.history = this.state.history.filter(c => c !== city);
-        this.state.history.unshift(city);
+        if (!city) return;
+        const histKey = `${city}|${this.state.lat}|${this.state.lon}|${this.state.currentCountry}`;
+        this.state.history = this.state.history.filter(h => !h.startsWith(city + '|'));
+        this.state.history.unshift(histKey);
         if (this.state.history.length > CONFIG.MAX_HISTORY) {
             this.state.history = this.state.history.slice(0, CONFIG.MAX_HISTORY);
         }
@@ -408,6 +477,11 @@ const App = {
         this.renderHistory();
     },
 
+    _parseCityKey(key) {
+        const parts = key.split('|');
+        return { name: parts[0], lat: parseFloat(parts[1]), lon: parseFloat(parts[2]), country: parts[3] || '' };
+    },
+
     renderFavorites() {
         const list = this.elements.favorites_list;
         const noMsg = this.elements.no_favorites;
@@ -417,22 +491,25 @@ const App = {
             return;
         }
         noMsg.style.display = 'none';
-        list.innerHTML = this.state.favorites.map(city => `
-            <li class="city-item">
-                <span class="city-item-name" data-city="${city}">${city}</span>
-                <button class="city-item-remove" data-remove-fav="${city}">&times;</button>
-            </li>
-        `).join('');
+        list.innerHTML = this.state.favorites.map(fav => {
+            const c = this._parseCityKey(fav);
+            return `
+                <li class="city-item">
+                    <span class="city-item-name" data-lat="${c.lat}" data-lon="${c.lon}" data-name="${c.name}" data-country="${c.country}">${c.name}${c.country ? ', ' + c.country : ''}</span>
+                    <button class="city-item-remove" data-remove-fav="${c.name}">&times;</button>
+                </li>
+            `;
+        }).join('');
         list.querySelectorAll('.city-item-name').forEach(el => {
             el.addEventListener('click', () => {
-                this.loadWeather(el.dataset.city);
+                this.loadWeatherByCoords(parseFloat(el.dataset.lat), parseFloat(el.dataset.lon), el.dataset.name, el.dataset.country);
                 this.toggleSidebar(false);
             });
         });
         list.querySelectorAll('.city-item-remove').forEach(el => {
             el.addEventListener('click', e => {
                 e.stopPropagation();
-                this.state.favorites = this.state.favorites.filter(c => c !== el.dataset.removeFav);
+                this.state.favorites = this.state.favorites.filter(f => !f.startsWith(el.dataset.removeFav + '|'));
                 localStorage.setItem('favorites', JSON.stringify(this.state.favorites));
                 this.renderFavorites();
                 this.updateFavButton();
@@ -452,14 +529,17 @@ const App = {
         }
         noMsg.style.display = 'none';
         clearBtn.style.display = 'block';
-        list.innerHTML = this.state.history.map(city => `
-            <li class="city-item">
-                <span class="city-item-name" data-city="${city}">${city}</span>
-            </li>
-        `).join('');
+        list.innerHTML = this.state.history.map(h => {
+            const c = this._parseCityKey(h);
+            return `
+                <li class="city-item">
+                    <span class="city-item-name" data-lat="${c.lat}" data-lon="${c.lon}" data-name="${c.name}" data-country="${c.country}">${c.name}${c.country ? ', ' + c.country : ''}</span>
+                </li>
+            `;
+        }).join('');
         list.querySelectorAll('.city-item-name').forEach(el => {
             el.addEventListener('click', () => {
-                this.loadWeather(el.dataset.city);
+                this.loadWeatherByCoords(parseFloat(el.dataset.lat), parseFloat(el.dataset.lon), el.dataset.name, el.dataset.country);
                 this.toggleSidebar(false);
             });
         });
