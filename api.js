@@ -1,47 +1,78 @@
 const WeatherAPI = {
-    async getCurrentWeather(city) {
-        const url = `${CONFIG.BASE_URL}/weather?q=${encodeURIComponent(city)}&appid=${CONFIG.API_KEY}&units=${CONFIG.DEFAULT_UNITS}&lang=${CONFIG.DEFAULT_LANG}`;
-        return this._fetch(url, `current_${city}`);
+    async getWeatherByCoords(lat, lon) {
+        const params = new URLSearchParams({
+            latitude: lat,
+            longitude: lon,
+            current: 'temperature_2m,relative_humidity_2m,apparent_temperature,is_day,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m,surface_pressure,cloud_cover,visibility',
+            hourly: 'temperature_2m,weather_code,is_day',
+            daily: 'weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max,precipitation_probability_max',
+            timezone: 'auto',
+            forecast_days: 7
+        });
+        const url = `${CONFIG.WEATHER_URL}?${params}`;
+        return this._fetch(url, `weather_${lat}_${lon}`);
     },
 
-    async getCurrentWeatherByCoords(lat, lon) {
-        const url = `${CONFIG.BASE_URL}/weather?lat=${lat}&lon=${lon}&appid=${CONFIG.API_KEY}&units=${CONFIG.DEFAULT_UNITS}&lang=${CONFIG.DEFAULT_LANG}`;
-        return this._fetch(url, `current_${lat}_${lon}`);
-    },
-
-    async getForecast(city) {
-        const url = `${CONFIG.BASE_URL}/forecast?q=${encodeURIComponent(city)}&appid=${CONFIG.API_KEY}&units=${CONFIG.DEFAULT_UNITS}&lang=${CONFIG.DEFAULT_LANG}`;
-        return this._fetch(url, `forecast_${city}`);
-    },
-
-    async getForecastByCoords(lat, lon) {
-        const url = `${CONFIG.BASE_URL}/forecast?lat=${lat}&lon=${lon}&appid=${CONFIG.API_KEY}&units=${CONFIG.DEFAULT_UNITS}&lang=${CONFIG.DEFAULT_LANG}`;
-        return this._fetch(url, `forecast_${lat}_${lon}`);
-    },
-
-    async getAirPollution(lat, lon) {
-        const url = `${CONFIG.BASE_URL}/air_pollution?lat=${lat}&lon=${lon}&appid=${CONFIG.API_KEY}`;
-        return this._fetch(url, `aqi_${lat}_${lon}`);
+    async getAirQuality(lat, lon) {
+        const params = new URLSearchParams({
+            latitude: lat,
+            longitude: lon,
+            current: 'european_aqi,pm10,pm2_5'
+        });
+        const url = `${CONFIG.AQI_URL}?${params}`;
+        try {
+            return await this._fetch(url, `aqi_${lat}_${lon}`);
+        } catch {
+            return null;
+        }
     },
 
     async searchCities(query) {
         if (!query || query.length < 2) return [];
-        const url = `${CONFIG.GEO_URL}/direct?q=${encodeURIComponent(query)}&limit=5&appid=${CONFIG.API_KEY}`;
+        const params = new URLSearchParams({
+            name: query,
+            count: 5,
+            language: 'tr',
+            format: 'json'
+        });
         try {
-            const response = await fetch(url);
+            const response = await fetch(`${CONFIG.GEO_URL}?${params}`);
             if (!response.ok) return [];
             const data = await response.json();
-            return data.map(city => ({
+            if (!data.results) return [];
+            return data.results.map(city => ({
                 name: city.name,
-                country: city.country,
-                state: city.state || '',
-                lat: city.lat,
-                lon: city.lon,
-                display: city.state ? `${city.name}, ${city.state}, ${city.country}` : `${city.name}, ${city.country}`
+                country: city.country || '',
+                admin1: city.admin1 || '',
+                lat: city.latitude,
+                lon: city.longitude,
+                display: [city.name, city.admin1, city.country].filter(Boolean).join(', ')
             }));
         } catch {
             return [];
         }
+    },
+
+    async geocodeCity(cityName) {
+        const params = new URLSearchParams({
+            name: cityName,
+            count: 1,
+            language: 'tr',
+            format: 'json'
+        });
+        const response = await fetch(`${CONFIG.GEO_URL}?${params}`);
+        if (!response.ok) throw new Error('Sehir bulunamadi.');
+        const data = await response.json();
+        if (!data.results || data.results.length === 0) {
+            throw new Error('Sehir bulunamadi. Lutfen baska bir sehir deneyin.');
+        }
+        const city = data.results[0];
+        return {
+            name: city.name,
+            country: city.country || '',
+            lat: city.latitude,
+            lon: city.longitude
+        };
     },
 
     async _fetch(url, cacheKey) {
@@ -50,8 +81,7 @@ const WeatherAPI = {
 
         const response = await fetch(url);
         if (!response.ok) {
-            if (response.status === 401) throw new Error('API anahtari gecersiz. Lutfen gecerli bir OpenWeatherMap API anahtari girin.');
-            if (response.status === 404) throw new Error('Sehir bulunamadi. Lutfen baska bir sehir deneyin.');
+            if (response.status === 404) throw new Error('Sehir bulunamadi.');
             if (response.status === 429) throw new Error('Cok fazla istek gonderildi. Lutfen biraz bekleyin.');
             throw new Error(`Hava durumu verisi alinamadi (Hata: ${response.status})`);
         }
@@ -82,8 +112,6 @@ const WeatherAPI = {
                 data,
                 timestamp: Date.now()
             }));
-        } catch {
-            // storage full
-        }
+        } catch {}
     }
 };
